@@ -9,4 +9,6 @@ edition = "2021"
 clap = { version = "4.4.7", features = ["derive"] }
 gfa = "0.10.1"
 handlegraph = "0.7.0-alpha.9"
+flatgfa = { path = "../pollen/flatgfa" }
+bstr = "1.9.1"
 rayon = "1.8.0"

@@ -6,6 +6,7 @@ use handlegraph::{
     packedgraph::PackedGraph,
     pathhandlegraph::{GraphPathNames, GraphPathsSteps, IntoPathIds},
 };
+use flatgfa::{FlatGFA, file};
 use rayon::prelude::*;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -15,11 +16,14 @@ use std::time::Instant;
 struct Cli {
     path: PathBuf,
 
-    #[arg(short, long)]
+    #[arg(long)]
     hashgraph: bool,
+
+    #[arg(long)]
+    flatgfa: bool,
 }
 
-fn do_hash_performance_check(graph: HashGraph) -> Result<(), Box<dyn std::error::Error>> {
+fn hash_performance_check(graph: HashGraph) -> Result<(), Box<dyn std::error::Error>> {
     let now = Instant::now();
     let path_ids = graph.path_ids().par_bridge();
     let steps: Vec<(Result<String, _>, usize)> = path_ids
@@ -43,7 +47,7 @@ fn do_hash_performance_check(graph: HashGraph) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
-fn do_packed_performance_check(graph: PackedGraph) -> Result<(), Box<dyn std::error::Error>> {
+fn packed_performance_check(graph: PackedGraph) -> Result<(), Box<dyn std::error::Error>> {
     let now = Instant::now();
     let path_ids = graph.path_ids().par_bridge();
     let steps: Vec<(Result<String, _>, usize)> = path_ids
@@ -67,24 +71,53 @@ fn do_packed_performance_check(graph: PackedGraph) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
+fn fgfa_performance_check(graph: FlatGFA) -> Result<(), Box<dyn std::error::Error>> {
+    let now = Instant::now();
+    let steps: Vec<(Result<String, _>, usize)> = graph.paths.all().iter()
+        .map(|p| {
+            (
+                graph.get_path_name(p).try_into().unwrap(),
+                p.step_count()
+            )
+        }).collect();
+    // for (name, step) in steps {
+    // println!("Steps in {}: {}", name?, step);
+    // }
+    eprintln!("Time: {}ms", now.elapsed().as_millis());
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    //let path = Path::new("./t.gfa");
-    let now = Instant::now();
-    let gfa_parser = GFAParser::new();
-    let gfa = gfa_parser.parse_file(cli.path)?;
-    eprintln!("Time to parse: {}ms", now.elapsed().as_millis());
-    if cli.hashgraph {
+    if cli.flatgfa {
         let now = Instant::now();
-        let graph = from_gfa::<HashGraph, ()>(&gfa);
+
+        eprintln!("Time to parse: {}ms", now.elapsed().as_millis());
+        let mmap = file::map_file(cli.path.to_str().unwrap());
+        let now = Instant::now();
+        let graph = file::view(&mmap);
         eprintln!("Time to build: {}ms", now.elapsed().as_millis());
-        do_hash_performance_check(graph)?;
+
+        fgfa_performance_check(graph)?;
+
     } else {
+        //let path = Path::new("./t.gfa");
         let now = Instant::now();
-        let graph = from_gfa::<PackedGraph, ()>(&gfa);
-        eprintln!("Time to build: {}ms", now.elapsed().as_millis());
-        do_packed_performance_check(graph)?;
+        let gfa_parser = GFAParser::new();
+        let gfa = gfa_parser.parse_file(cli.path)?;
+        eprintln!("Time to parse: {}ms", now.elapsed().as_millis());
+        if cli.hashgraph {
+            let now = Instant::now();
+            let graph = from_gfa::<HashGraph, ()>(&gfa);
+            eprintln!("Time to build: {}ms", now.elapsed().as_millis());
+            hash_performance_check(graph)?;
+        } else {
+            let now = Instant::now();
+            let graph = from_gfa::<PackedGraph, ()>(&gfa);
+            eprintln!("Time to build: {}ms", now.elapsed().as_millis());
+            packed_performance_check(graph)?;
+        }
     }
     Ok(())
 }
