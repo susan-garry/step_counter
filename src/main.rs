@@ -6,7 +6,7 @@ use handlegraph::{
     packedgraph::PackedGraph,
     pathhandlegraph::{GraphPathNames, GraphPathsSteps, IntoPathIds},
 };
-use flatgfa::{FlatGFA, file};
+use flatgfa::{FlatGFA, file, parse::Parser as FGFAParser};
 use rayon::prelude::*;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -76,7 +76,7 @@ fn fgfa_performance_check(graph: FlatGFA) -> Result<(), Box<dyn std::error::Erro
     let steps: Vec<(Result<String, _>, usize)> = graph.paths.all().iter()
         .map(|p| {
             (
-                graph.get_path_name(p).try_into().unwrap(),
+                graph.get_path_name(p).try_into(),
                 p.step_count()
             )
         }).collect();
@@ -96,10 +96,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("Time to parse: {}ms", now.elapsed().as_millis());
         let mmap = file::map_file(cli.path.to_str().unwrap());
         let now = Instant::now();
-        let graph = file::view(&mmap);
+        let store = FGFAParser::for_heap().parse_mem(mmap.as_ref());
+        let gfa = store.as_ref();
         eprintln!("Time to build: {}ms", now.elapsed().as_millis());
 
-        fgfa_performance_check(graph)?;
+        fgfa_performance_check(gfa)?;
 
     } else {
         //let path = Path::new("./t.gfa");
